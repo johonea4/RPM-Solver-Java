@@ -1,9 +1,34 @@
 package ravensproject;
 
 // Uncomment these lines to access image processing.
-//import java.awt.Image;
-//import java.io.File;
-//import javax.imageio.ImageIO;
+import java.awt.Image;
+import java.io.File;
+import javax.imageio.ImageIO;
+
+class LexicalDatabase
+{
+
+}
+
+class SemanticNetwork
+{
+
+}
+
+class SemanticNetworkGenerator
+{
+
+}
+
+class StatisticalAnalyzer
+{
+
+}
+
+class NetworkTester
+{
+
+}
 
 /**
  * Your Agent for solving Raven's Progressive Matrices. You MUST modify this
