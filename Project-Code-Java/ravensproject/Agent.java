@@ -2,21 +2,130 @@ package ravensproject;
 
 // Uncomment these lines to access image processing.
 import java.awt.Image;
+import java.io.Console;
 import java.io.File;
+import java.sql.Array;
+import java.sql.Struct;
+import java.util.ArrayList;
+import java.util.HashMap;
 import javax.imageio.ImageIO;
 
 class LexicalDatabase
 {
+    public LexicalDatabase()
+    {
+        database.clear();
+    }
+    public int getValue(String val)
+    {
+        if(!database.containsKey(val)) database.put(val,database.size()+1);
+        return database.get(val);
+    }
+
+    private HashMap<String, Integer> database;
+}
+
+class GraphNode
+{
+    public String objectName;
+    public RavensObject object;
+    public HashMap<Integer,Integer> attributes;
+    public int MatchScore(GraphNode node)
+    {
+        int score = 0;
+        if(this.attributes.size() == node.attributes.size()) score++;
+        for(Integer i : this.attributes.keySet())
+        {
+            if(node.attributes.containsKey(i))
+            {
+                score++;
+                if(node.attributes.get(i) == this.attributes.get(i)) score++;
+            }
+        }
+        return score;
+    }
+}
+
+class NodeRelationship
+{
+    public GraphNode node1;
+    public GraphNode node2;
+    public int relationship;
+}
+
+class FigureGraph
+{
+    public String figureName;
+    public RavensFigure figure;
+    public ArrayList<NodeRelationship> relationships;
 
 }
 
-class SemanticNetwork
+class TranslationConnection
 {
+    public GraphNode figure1Node;
+    public GraphNode figure2Node;
+    public int translation;
+}
 
+class FigureTranslation
+{
+    public String f1Name;
+    public String f2Name;
+    public FigureGraph figure1;
+    public FigureGraph figure2;
+    public ArrayList<TranslationConnection> translations;
+}
+
+class RPM_Graph
+{
+    //---- 2x2 will result in A->B, C->N, A->C, B->N
+    //---- 3x3 will result in A->B,B->C, D->E,E->F, G->H,H->N
+    //----                    A->D,D->G, B->E,E->H, C->F,F->N
+    public int problemType;
+    public ArrayList<FigureTranslation> rpm;
 }
 
 class SemanticNetworkGenerator
 {
+    public SemanticNetworkGenerator(LexicalDatabase ld, HashMap<String, RavensFigure> rf, int ptype)
+    {
+        ravensfigures = rf;
+        lexicalDatabase = ld;
+        problemType = ptype;
+    }
+
+    public ArrayList<RPM_Graph> generateNets()
+    {
+        if(problemType==0) return generateNets_2x2();
+        else return generateNets_3x3();
+    }
+
+    private HashMap<String, RavensFigure> ravensfigures;
+    private LexicalDatabase lexicalDatabase;
+    private int problemType;
+
+    private ArrayList<RPM_Graph> generateNets_2x2()
+    {
+        //---Alright, First each figure needs relationships built
+
+        //---Next Find matching figures between figures
+
+        //---Next Find the translations between the figures
+
+        //---Return a list of all graphs
+    }
+
+    private ArrayList<RPM_Graph> generateNets_3x3()
+    {
+        //---Alright, First each figure needs relationships built
+
+        //---Next Find matching figures between figures
+
+        //---Next Find the translations between the figures
+
+        //---Return a list of all graphs
+    }
 
 }
 
@@ -53,7 +162,7 @@ public class Agent {
      * 
      */
     public Agent() {
-        
+        lexicalDatabase = new LexicalDatabase();
     }
     /**
      * The primary method for solving incoming Raven's Progressive Matrices.
@@ -69,6 +178,25 @@ public class Agent {
      * @return your Agent's answer to this problem
      */
     public int Solve(RavensProblem problem) {
+
+        if(problem.hasVisual() && !problem.hasVerbal()) return -1;
+
+        System.console().printf("=========================================\n");
+        System.console().printf("Starting Problem: %s\n", problem.getName());
+        System.console().printf("Problem Type: %s\n",problem.getProblemType());
+        System.console().printf("Num Figures: %d\n", problem.getFigures().size());
+        System.console().printf("=========================================\n");
+
+        HashMap<String, RavensFigure> figures = problem.getFigures();
+
+        SemanticNetworkGenerator generator = new SemanticNetworkGenerator(lexicalDatabase, figures, problem.getProblemType()== "2x2" ? 0 : 1);
+
+
+
+        System.console().printf("=========================================\n");
+
         return -1;
     }
+
+    private LexicalDatabase lexicalDatabase;
 }
