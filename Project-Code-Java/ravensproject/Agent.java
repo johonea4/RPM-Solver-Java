@@ -1,6 +1,9 @@
 package ravensproject;
 
 // Uncomment these lines to access image processing.
+import com.sun.deploy.util.StringUtils;
+import jdk.nashorn.internal.codegen.types.NumericType;
+
 import java.awt.Image;
 import java.io.Console;
 import java.io.File;
@@ -8,42 +11,74 @@ import java.sql.Array;
 import java.sql.Struct;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.lang.Object;
 import javax.imageio.ImageIO;
 
 class LexicalDatabase
 {
+    enum KEYS   { SHAPE, ALIGNMENT, ABOVE, BELOW, INSIDE, OUTSIDE, LEFT, RIGHT, FILL, SIZE, ANGLE,  }
+    enum SHAPES { SQUARE, CIRCLE, TRIANGLE, RECTANGLE, PENTAGON, HEXAGON, OCTAGON, DIAMOND, RIGHT_TRIANGLE }
+    enum SIZES   { LARGE, VERY_LARGE, MEDIUM, HUGE, SMALL, VERY_SMALL };
+    enum VOCAB  { NOT_DEFINED,
+                  BOTTOM_RIGHT, BOTTOM_LEFT, TOP_RIGHT, TOP_LEFT, BOTTOM, TOP,
+                  LEFT_HALF, RIGHT_HALF, TOP_HALF, BOTTOM_HALF, YES, NO }
+    enum TRANSLATIONS { UNKNOWN, UNCHANGED, DELETED, MOVED, ENLARGE, SHRINK, SUBTRACTED, ROTATED, MIRRORED, NEW }
     public LexicalDatabase()
     {
         database.clear();
+        for( SHAPES v : SHAPES.values())
+            database.put(v.name(),v);
+        for( SIZES v : SIZES.values())
+            database.put(v.name(),v);
+        for( VOCAB v : VOCAB.values())
+            database.put(v.name(),v);
+        for( TRANSLATIONS v : TRANSLATIONS.values())
+            database.put(v.name(),v);
+
     }
-    public int getValue(String val)
+    public Object getValue(String s)
     {
-        if(!database.containsKey(val)) database.put(val,database.size()+1);
-        return database.get(val);
+        if(s.isEmpty()) return VOCAB.NOT_DEFINED;
+        s = s.replaceAll(" ", "_");
+        s = s.toUpperCase();
+        if(database.containsKey(s)) return database.get(s);
+        boolean isNumber=true;
+        double n = 0;
+        try { n = Double.parseDouble(s); }
+        catch (NumberFormatException e){  isNumber=false; }
+
+        if(isNumber) return n;
+        if(s == "true" ) database.put(s,true);
+        if(s == "false") database.put(s,false);
+
+
+        database.put(s,database.size()+1);
+        return database.get(s);
     }
 
-    private HashMap<String, Integer> database;
+    HashMap<String,Object> database;
 }
 
 class GraphNode
 {
+    public GraphNode(RavensObject obj, LexicalDatabase db)
+    {
+        object = obj;
+        objectName = obj.getName();
+        position = (LexicalDatabase.VOCAB)db.getValue(obj.getAttributes().get("alignment"));
+        shape = (LexicalDatabase.SHAPES)db.getValue(obj.getAttributes().get("shape"));
+        size = (LexicalDatabase.SIZES)db.getValue(obj.getAttributes().get("size"));
+        fill = (LexicalDatabase.VOCAB)db.getValue(obj.getAttributes().get("fill"));
+        angle = (double)db.getValue(obj.getAttributes().get("angle"));
+    }
     public String objectName;
     public RavensObject object;
-    public HashMap<Integer,Integer> attributes;
-    public int MatchScore(GraphNode node)
-    {
-        int score = 0;
-        if(this.attributes.size() == node.attributes.size()) score++;
-        for(Integer i : this.attributes.keySet())
-        {
-            if(node.attributes.containsKey(i))
-            {
-                score++;
-                if(node.attributes.get(i) == this.attributes.get(i)) score++;
-            }
-        }
-        return score;
-    }
+    public LexicalDatabase.VOCAB position;
+    public LexicalDatabase.SHAPES shape;
+    public LexicalDatabase.SIZES size;
+    public LexicalDatabase.VOCAB fill;
+    public double angle;
+
 }
 
 class NodeRelationship
@@ -105,6 +140,23 @@ class SemanticNetworkGenerator
     private LexicalDatabase lexicalDatabase;
     private int problemType;
 
+    private FigureGraph BuildFigureRelationships(RavensFigure f)
+    {
+        HashMap<String, RavensObject> objs = f.getObjects();
+        ArrayList<GraphNode> nodes = new ArrayList<GraphNode>();
+        for(String key : objs.keySet())
+        {
+            nodes.add(new GraphNode(objs.get(key),lexicalDatabase));
+        }
+
+        for( GraphNode nd : nodes)
+        {
+            for( GraphNode nd2 : nodes)
+            {
+                if(nd == nd2) continue;
+            }
+        }
+    }
     private ArrayList<RPM_Graph> generateNets_2x2()
     {
         //---Alright, First each figure needs relationships built
