@@ -9,14 +9,14 @@ import java.io.Console;
 import java.io.File;
 import java.sql.Array;
 import java.sql.Struct;
-import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.*;
 import java.lang.Object;
 import javax.imageio.ImageIO;
 
 class LexicalDatabase
 {
-    enum KEYS   { SHAPE, ALIGNMENT, ABOVE, BELOW, INSIDE, OUTSIDE, LEFT, RIGHT, FILL, SIZE, ANGLE,  }
+    enum KEYS { SHAPE, ALIGNMENT, FILL, SIZE, ANGLE }
+    enum RELATIONSHIPS   { UNKNOWN, ABOVE, BELOW, INSIDE, OUTSIDE, LEFT, RIGHT, FILL, SIZE, ANGLE, SELF }
     enum SHAPES { SQUARE, CIRCLE, TRIANGLE, RECTANGLE, PENTAGON, HEXAGON, OCTAGON, DIAMOND, RIGHT_TRIANGLE }
     enum SIZES   { LARGE, VERY_LARGE, MEDIUM, HUGE, SMALL, VERY_SMALL };
     enum VOCAB  { NOT_DEFINED,
@@ -26,16 +26,14 @@ class LexicalDatabase
     public LexicalDatabase()
     {
         database.clear();
-        for( SHAPES v : SHAPES.values())
-            database.put(v.name(),v);
-        for( SIZES v : SIZES.values())
-            database.put(v.name(),v);
-        for( VOCAB v : VOCAB.values())
-            database.put(v.name(),v);
-        for( TRANSLATIONS v : TRANSLATIONS.values())
-            database.put(v.name(),v);
-
+        for( SHAPES v : SHAPES.values()) database.put(v.name(),v);
+        for( SIZES v : SIZES.values()) database.put(v.name(),v);
+        for( VOCAB v : VOCAB.values()) database.put(v.name(),v);
+        for( TRANSLATIONS v : TRANSLATIONS.values()) database.put(v.name(),v);
+        for( KEYS v : KEYS.values()) database.put(v.name(),v);
+        for( RELATIONSHIPS v : RELATIONSHIPS.values()) database.put(v.name(),v);
     }
+
     public Object getValue(String s)
     {
         if(s.isEmpty()) return VOCAB.NOT_DEFINED;
@@ -50,7 +48,6 @@ class LexicalDatabase
         if(isNumber) return n;
         if(s == "true" ) database.put(s,true);
         if(s == "false") database.put(s,false);
-
 
         database.put(s,database.size()+1);
         return database.get(s);
@@ -83,19 +80,83 @@ class GraphNode
 
 class NodeRelationship
 {
+    public NodeRelationship(GraphNode n1, GraphNode n2)
+    {
+        node1 = n1;
+        node2 = n2;
+        if(n1 == n2) relationship = LexicalDatabase.RELATIONSHIPS.SELF;
+        //---Above/Below
+        if(n1.object.getAttributes().containsKey(LexicalDatabase.RELATIONSHIPS.ABOVE.name()))
+        {
+            List<String> list = Arrays.asList(n1.object.getAttributes().get(LexicalDatabase.RELATIONSHIPS.ABOVE.name()).split(","));
+            if(list.contains(n2.objectName)) { relationship = LexicalDatabase.RELATIONSHIPS.ABOVE; return; }
+        }
+        if(n2.object.getAttributes().containsKey(LexicalDatabase.RELATIONSHIPS.ABOVE.name()))
+        {
+            List<String> list = Arrays.asList(n2.object.getAttributes().get(LexicalDatabase.RELATIONSHIPS.ABOVE.name()).split(","));
+            if(list.contains(n1.objectName)) { relationship = LexicalDatabase.RELATIONSHIPS.BELOW; return; }
+        }
+        //---Inside/Outside
+        if(n1.object.getAttributes().containsKey(LexicalDatabase.RELATIONSHIPS.INSIDE.name()))
+        {
+            List<String> list = Arrays.asList(n1.object.getAttributes().get(LexicalDatabase.RELATIONSHIPS.INSIDE.name()).split(","));
+            if(list.contains(n2.objectName)) { relationship = LexicalDatabase.RELATIONSHIPS.INSIDE; return; }
+        }
+        if(n2.object.getAttributes().containsKey(LexicalDatabase.RELATIONSHIPS.INSIDE.name()))
+        {
+            List<String> list = Arrays.asList(n2.object.getAttributes().get(LexicalDatabase.RELATIONSHIPS.INSIDE.name()).split(","));
+            if(list.contains(n1.objectName)) { relationship = LexicalDatabase.RELATIONSHIPS.OUTSIDE; return; }
+        }
+        //---Left/Right
+        if(n1.object.getAttributes().containsKey(LexicalDatabase.RELATIONSHIPS.LEFT.name()))
+        {
+            List<String> list = Arrays.asList(n1.object.getAttributes().get(LexicalDatabase.RELATIONSHIPS.LEFT.name()).split(","));
+            if(list.contains(n2.objectName)) { relationship = LexicalDatabase.RELATIONSHIPS.LEFT; return; }
+        }
+        if(n2.object.getAttributes().containsKey(LexicalDatabase.RELATIONSHIPS.LEFT.name()))
+        {
+            List<String> list = Arrays.asList(n2.object.getAttributes().get(LexicalDatabase.RELATIONSHIPS.LEFT.name()).split(","));
+            if(list.contains(n1.objectName)) { relationship = LexicalDatabase.RELATIONSHIPS.RIGHT; return; }
+        }
+        if(n1.object.getAttributes().containsKey(LexicalDatabase.RELATIONSHIPS.RIGHT.name()))
+        {
+            List<String> list = Arrays.asList(n1.object.getAttributes().get(LexicalDatabase.RELATIONSHIPS.RIGHT.name()).split(","));
+            if(list.contains(n2.objectName)) { relationship = LexicalDatabase.RELATIONSHIPS.RIGHT; return; }
+        }
+        if(n2.object.getAttributes().containsKey(LexicalDatabase.RELATIONSHIPS.RIGHT.name()))
+        {
+            List<String> list = Arrays.asList(n2.object.getAttributes().get(LexicalDatabase.RELATIONSHIPS.RIGHT.name()).split(","));
+            if(list.contains(n1.objectName)) { relationship = LexicalDatabase.RELATIONSHIPS.LEFT; return; }
+        }
+        //---Add Position to Above,Below,Left,Right?
+        relationship = LexicalDatabase.RELATIONSHIPS.UNKNOWN;
+    }
     public GraphNode node1;
     public GraphNode node2;
-    public int relationship;
+    public LexicalDatabase.RELATIONSHIPS relationship;
 }
 
 class FigureGraph
 {
+    public FigureGraph(RavensFigure f, LexicalDatabase db)
+    {
+        figureName = f.getName();
+        figure = f;
+
+        HashMap<String, RavensObject> nodelist = f.getObjects();
+        for(RavensObject n : nodelist.values())
+            Nodes.add(new GraphNode(n,db));
+        for(GraphNode n1 : Nodes)
+            for(GraphNode n2 : Nodes)
+                relationships.add(new NodeRelationship(n1,n2));
+    }
     public String figureName;
     public RavensFigure figure;
-    public ArrayList<NodeRelationship> relationships;
+    public List<GraphNode> Nodes;
+    public List<NodeRelationship> relationships;
 
 }
-
+//----Here Down-----> Still Working
 class TranslationConnection
 {
     public GraphNode figure1Node;
