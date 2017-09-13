@@ -18,7 +18,7 @@ class LexicalDatabase
     enum KEYS { SHAPE, ALIGNMENT, FILL, SIZE, ANGLE }
     enum RELATIONSHIPS   { UNKNOWN, ABOVE, BELOW, INSIDE, OUTSIDE, LEFT, RIGHT, FILL, SIZE, ANGLE, SELF }
     enum SHAPES { SQUARE, CIRCLE, TRIANGLE, RECTANGLE, PENTAGON, HEXAGON, OCTAGON, DIAMOND, RIGHT_TRIANGLE }
-    enum SIZES   { LARGE, VERY_LARGE, MEDIUM, HUGE, SMALL, VERY_SMALL };
+    enum SIZES   { VERY_SMALL, SMALL, MEDIUM, LARGE, VERY_LARGE, HUGE };
     enum VOCAB  { NOT_DEFINED,
                   BOTTOM_RIGHT, BOTTOM_LEFT, TOP_RIGHT, TOP_LEFT, BOTTOM, TOP,
                   LEFT_HALF, RIGHT_HALF, TOP_HALF, BOTTOM_HALF, YES, NO }
@@ -46,8 +46,6 @@ class LexicalDatabase
         catch (NumberFormatException e){  isNumber=false; }
 
         if(isNumber) return n;
-        if(s == "true" ) database.put(s,true);
-        if(s == "false") database.put(s,false);
 
         database.put(s,database.size()+1);
         return database.get(s);
@@ -68,6 +66,46 @@ class GraphNode
         fill = (LexicalDatabase.VOCAB)db.getValue(obj.getAttributes().get("fill"));
         angle = (double)db.getValue(obj.getAttributes().get("angle"));
     }
+    public void GetRelationships(HashMap<String,GraphNode> objects)
+    {
+        if(object.getAttributes().containsKey(LexicalDatabase.RELATIONSHIPS.ABOVE.name()))
+        {
+            List<String> list = Arrays.asList(object.getAttributes().get(LexicalDatabase.RELATIONSHIPS.ABOVE.name()).split(","));
+            for(String obj : list) if(objects.containsKey(obj)) above.add(objects.get(obj));
+        }
+        if(object.getAttributes().containsKey(LexicalDatabase.RELATIONSHIPS.INSIDE.name()))
+        {
+            List<String> list = Arrays.asList(object.getAttributes().get(LexicalDatabase.RELATIONSHIPS.INSIDE.name()).split(","));
+            for(String obj : list) if(objects.containsKey(obj)) inside.add(objects.get(obj));
+        }
+        if(object.getAttributes().containsKey(LexicalDatabase.RELATIONSHIPS.LEFT.name()))
+        {
+            List<String> list = Arrays.asList(object.getAttributes().get(LexicalDatabase.RELATIONSHIPS.LEFT.name()).split(","));
+            for(String obj : list) if(objects.containsKey(obj)) left.add(objects.get(obj));
+        }
+        if(object.getAttributes().containsKey(LexicalDatabase.RELATIONSHIPS.RIGHT.name()))
+        {
+            List<String> list = Arrays.asList(object.getAttributes().get(LexicalDatabase.RELATIONSHIPS.RIGHT.name()).split(","));
+            for(String obj : list) if(objects.containsKey(obj)) right.add(objects.get(obj));
+        }
+        if(position != LexicalDatabase.VOCAB.NOT_DEFINED)
+        {
+            if(position.name().contains("TOP"))
+                for(GraphNode nd : objects.values())
+                    if(nd.position != LexicalDatabase.VOCAB.NOT_DEFINED && !nd.position.name().contains("TOP")) above.add(nd);
+            if(position.name().contains("LEFT"))
+                for(GraphNode nd : objects.values())
+                    if(nd.position != LexicalDatabase.VOCAB.NOT_DEFINED && !nd.position.name().contains("LEFT")) above.add(nd);
+            if(position.name().contains("RIGHT"))
+                for(GraphNode nd : objects.values())
+                    if(nd.position != LexicalDatabase.VOCAB.NOT_DEFINED && !nd.position.name().contains("RIGHT")) above.add(nd);
+            for(GraphNode nd : objects.values())
+                if(nd.position != LexicalDatabase.VOCAB.NOT_DEFINED && nd.position == position)
+                    if(nd.size.ordinal() > size.ordinal())
+                        inside.add(nd);
+        }
+    }
+
     public String objectName;
     public RavensObject object;
     public LexicalDatabase.VOCAB position;
@@ -75,65 +113,10 @@ class GraphNode
     public LexicalDatabase.SIZES size;
     public LexicalDatabase.VOCAB fill;
     public double angle;
-
-}
-
-class NodeRelationship
-{
-    public NodeRelationship(GraphNode n1, GraphNode n2)
-    {
-        node1 = n1;
-        node2 = n2;
-        if(n1 == n2) relationship = LexicalDatabase.RELATIONSHIPS.SELF;
-        //---Above/Below
-        if(n1.object.getAttributes().containsKey(LexicalDatabase.RELATIONSHIPS.ABOVE.name()))
-        {
-            List<String> list = Arrays.asList(n1.object.getAttributes().get(LexicalDatabase.RELATIONSHIPS.ABOVE.name()).split(","));
-            if(list.contains(n2.objectName)) { relationship = LexicalDatabase.RELATIONSHIPS.ABOVE; return; }
-        }
-        if(n2.object.getAttributes().containsKey(LexicalDatabase.RELATIONSHIPS.ABOVE.name()))
-        {
-            List<String> list = Arrays.asList(n2.object.getAttributes().get(LexicalDatabase.RELATIONSHIPS.ABOVE.name()).split(","));
-            if(list.contains(n1.objectName)) { relationship = LexicalDatabase.RELATIONSHIPS.BELOW; return; }
-        }
-        //---Inside/Outside
-        if(n1.object.getAttributes().containsKey(LexicalDatabase.RELATIONSHIPS.INSIDE.name()))
-        {
-            List<String> list = Arrays.asList(n1.object.getAttributes().get(LexicalDatabase.RELATIONSHIPS.INSIDE.name()).split(","));
-            if(list.contains(n2.objectName)) { relationship = LexicalDatabase.RELATIONSHIPS.INSIDE; return; }
-        }
-        if(n2.object.getAttributes().containsKey(LexicalDatabase.RELATIONSHIPS.INSIDE.name()))
-        {
-            List<String> list = Arrays.asList(n2.object.getAttributes().get(LexicalDatabase.RELATIONSHIPS.INSIDE.name()).split(","));
-            if(list.contains(n1.objectName)) { relationship = LexicalDatabase.RELATIONSHIPS.OUTSIDE; return; }
-        }
-        //---Left/Right
-        if(n1.object.getAttributes().containsKey(LexicalDatabase.RELATIONSHIPS.LEFT.name()))
-        {
-            List<String> list = Arrays.asList(n1.object.getAttributes().get(LexicalDatabase.RELATIONSHIPS.LEFT.name()).split(","));
-            if(list.contains(n2.objectName)) { relationship = LexicalDatabase.RELATIONSHIPS.LEFT; return; }
-        }
-        if(n2.object.getAttributes().containsKey(LexicalDatabase.RELATIONSHIPS.LEFT.name()))
-        {
-            List<String> list = Arrays.asList(n2.object.getAttributes().get(LexicalDatabase.RELATIONSHIPS.LEFT.name()).split(","));
-            if(list.contains(n1.objectName)) { relationship = LexicalDatabase.RELATIONSHIPS.RIGHT; return; }
-        }
-        if(n1.object.getAttributes().containsKey(LexicalDatabase.RELATIONSHIPS.RIGHT.name()))
-        {
-            List<String> list = Arrays.asList(n1.object.getAttributes().get(LexicalDatabase.RELATIONSHIPS.RIGHT.name()).split(","));
-            if(list.contains(n2.objectName)) { relationship = LexicalDatabase.RELATIONSHIPS.RIGHT; return; }
-        }
-        if(n2.object.getAttributes().containsKey(LexicalDatabase.RELATIONSHIPS.RIGHT.name()))
-        {
-            List<String> list = Arrays.asList(n2.object.getAttributes().get(LexicalDatabase.RELATIONSHIPS.RIGHT.name()).split(","));
-            if(list.contains(n1.objectName)) { relationship = LexicalDatabase.RELATIONSHIPS.LEFT; return; }
-        }
-        //---Add Position to Above,Below,Left,Right?
-        relationship = LexicalDatabase.RELATIONSHIPS.UNKNOWN;
-    }
-    public GraphNode node1;
-    public GraphNode node2;
-    public LexicalDatabase.RELATIONSHIPS relationship;
+    public List<GraphNode> inside;
+    public List<GraphNode> above;
+    public List<GraphNode> left;
+    public List<GraphNode> right;
 }
 
 class FigureGraph
@@ -145,15 +128,13 @@ class FigureGraph
 
         HashMap<String, RavensObject> nodelist = f.getObjects();
         for(RavensObject n : nodelist.values())
-            Nodes.add(new GraphNode(n,db));
-        for(GraphNode n1 : Nodes)
-            for(GraphNode n2 : Nodes)
-                relationships.add(new NodeRelationship(n1,n2));
+            Nodes.put(n.getName(), new GraphNode(n,db));
+        for(GraphNode n1 : Nodes.values())
+            n1.GetRelationships(Nodes);
     }
     public String figureName;
     public RavensFigure figure;
-    public List<GraphNode> Nodes;
-    public List<NodeRelationship> relationships;
+    public HashMap<String,GraphNode> Nodes;
 
 }
 //----Here Down-----> Still Working
