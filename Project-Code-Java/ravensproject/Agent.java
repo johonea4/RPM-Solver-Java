@@ -1,9 +1,6 @@
 package ravensproject;
 
 // Uncomment these lines to access image processing.
-import com.sun.deploy.util.StringUtils;
-import jdk.nashorn.internal.codegen.types.NumericType;
-
 import java.awt.Image;
 import java.io.Console;
 import java.io.File;
@@ -22,7 +19,8 @@ class LexicalDatabase
     enum VOCAB  { NOT_DEFINED,
                   BOTTOM_RIGHT, BOTTOM_LEFT, TOP_RIGHT, TOP_LEFT, BOTTOM, TOP,
                   LEFT_HALF, RIGHT_HALF, TOP_HALF, BOTTOM_HALF, YES, NO }
-    enum TRANSLATIONS { UNKNOWN, UNCHANGED, DELETED, MOVED, ENLARGE, SHRINK, ROTATED, MIRRORED, NEW }
+    enum TRANSLATIONS { UNKNOWN, UNCHANGED, DELETED, MOVED, ENLARGE, SHRINK, ROTATED,
+                        MIRRORED, NEW, SHADED, UNSHADED, HALF_SHADED, HALF_UNSHADED, SHADE_CHANGED }
     public LexicalDatabase()
     {
         database = new HashMap<>();
@@ -130,6 +128,8 @@ class GraphNode
         int score=0;
         if(shape == nd.shape) score+=10;
         if(size == nd.size) score+=5;
+        if(position == nd.position) score++;
+        if(fill == nd.fill) score++;
         return score;
     }
 
@@ -182,8 +182,18 @@ class TranslationConnection
         if(n1.size.ordinal() > n2.size.ordinal()) translations.add(LexicalDatabase.TRANSLATIONS.SHRINK);
         if(n1.size.ordinal() < n2.size.ordinal()) translations.add(LexicalDatabase.TRANSLATIONS.ENLARGE);
         if(n1.angle != n2.angle) translations.add(LexicalDatabase.TRANSLATIONS.ROTATED);
+        if(n1.fill != n2.fill)
+        {
+            if(n1.fill == LexicalDatabase.VOCAB.YES && n2.fill==LexicalDatabase.VOCAB.NO) translations.add(LexicalDatabase.TRANSLATIONS.UNSHADED);
+            else if(n1.fill == LexicalDatabase.VOCAB.NO && n2.fill==LexicalDatabase.VOCAB.YES) translations.add(LexicalDatabase.TRANSLATIONS.SHADED);
+            else if(n1.fill == LexicalDatabase.VOCAB.YES && n2.fill.name().contains("HALF")) translations.add(LexicalDatabase.TRANSLATIONS.HALF_UNSHADED);
+            else if(n1.fill == LexicalDatabase.VOCAB.NO && n2.fill.name().contains("HALF")) translations.add(LexicalDatabase.TRANSLATIONS.HALF_SHADED);
+            else if(n2.fill == LexicalDatabase.VOCAB.YES && n1.fill.name().contains("HALF")) translations.add(LexicalDatabase.TRANSLATIONS.HALF_UNSHADED);
+            else if(n2.fill == LexicalDatabase.VOCAB.NO && n1.fill.name().contains("HALF")) translations.add(LexicalDatabase.TRANSLATIONS.HALF_SHADED);
+            else translations.add(LexicalDatabase.TRANSLATIONS.SHADE_CHANGED);
+        }
         if(n1.shape==n2.shape && n1.position==n2.position && n1.size==n2.size && n1.angle==n2.angle && n1.inside.size()==n2.inside.size() &&
-                n1.above.size()==n2.above.size() && n1.left.size()==n2.left.size() && n1.right.size()==n2.right.size())
+                n1.above.size()==n2.above.size() && n1.left.size()==n2.left.size() && n1.right.size()==n2.right.size() && n1.fill==n2.fill)
             translations.add(LexicalDatabase.TRANSLATIONS.UNCHANGED);
         if(translations.size()<=0) translations.add(LexicalDatabase.TRANSLATIONS.UNKNOWN);
     }
@@ -204,6 +214,8 @@ class TranslationGraph
         HashMap<String, GraphNode> f1Nodes = figure1.Nodes;
         HashMap<String, GraphNode> f2Nodes = figure2.Nodes;
 
+        List<GraphNode> matchedList = new ArrayList<>();
+
         for(GraphNode nd : f1Nodes.values())
         {
             int score=0;
@@ -211,12 +223,13 @@ class TranslationGraph
             for(GraphNode nd2 : f2Nodes.values())
             {
                 int score2 = nd.GetSimilarityScore(nd2);
-                if(score2 > score) {
+                if(score2 > score && !matchedList.contains(nd2)) {
                     score = score2;
                     matchNode = nd2;
                 }
             }
             connections.add(new TranslationConnection(nd,matchNode));
+            matchedList.add(matchNode);
         }
         for(GraphNode nd : f2Nodes.values())
         {
@@ -232,6 +245,30 @@ class TranslationGraph
             }
             if(score==0) connections.add(new TranslationConnection(null, nd));
         }
+    }
+    public TranslationConnection GetConnectionFromNode(GraphNode nd, int which)
+    {
+        for(TranslationConnection connection : connections)
+        {
+            if(which == 1)
+                if(nd==connection.Node1)
+                    return connection;
+            if(which == 2)
+                if(nd==connection.Node2)
+                    return connection;
+        }
+        if(connections.size()==1) return connections.get(0);
+        for(TranslationConnection connection : connections)
+        {
+            if(which == 1)
+                if(nd==null)
+                    return connection;
+            if(which == 2)
+                if(nd==null)
+                    return connection;
+        }
+
+        return null;
     }
     public FigureGraph figure1;
     public FigureGraph figure2;
@@ -285,16 +322,16 @@ class SemanticNetworkGenerator
         problemType = ptype;
     }
 
-    public List<RPM_Graph> generateNets()
+    public HashMap<String, RPM_Graph> generateNets()
     {
         Set<String> keys = ravensfigures.keySet();
-        List<RPM_Graph> nets = new ArrayList<RPM_Graph>();
+        HashMap<String, RPM_Graph> nets = new HashMap<>();
 
         for (String k : keys)
         {
             if(Character.isDigit(k.charAt(0)))
             {
-                nets.add(new RPM_Graph(ravensfigures,problemType,lexicalDatabase,k));
+                nets.put(k,new RPM_Graph(ravensfigures,problemType,lexicalDatabase,k));
             }
         }
         return nets;
@@ -307,12 +344,108 @@ class SemanticNetworkGenerator
 
 class StatisticalAnalyzer
 {
+    public StatisticalAnalyzer(HashMap<String, RPM_Graph> rpms, LexicalDatabase db)
+    {
+        Rpms = rpms;
+        lexicalDatabase = db;
+    }
+    public HashMap<String,Integer> GetScores_2x2()
+    {
+        HashMap<String,Integer> Scores = new HashMap<>();
 
-}
+        for(String key : Rpms.keySet())
+        {
+            int score = 0;
+            Scores.put(key,score);
+            TranslationGraph ab = Rpms.get(key).translationGraph.get("AB");
+            TranslationGraph ac = Rpms.get(key).translationGraph.get("AC");
+            TranslationGraph cn = Rpms.get(key).translationGraph.get("C"+key);
+            TranslationGraph bn = Rpms.get(key).translationGraph.get("B"+key);
 
-class NetworkTester
-{
+            if(ab.connections.size() == cn.connections.size()) score++;
+            if(ac.connections.size() == bn.connections.size()) score++;
 
+            for(TranslationConnection cn1 : bn.connections)
+            {
+                for(TranslationConnection cn2 : ac.connections)
+                {
+                    if(cn2.translations.containsAll(cn1.translations)) score+=cn1.translations.size();
+                }
+            }
+            for(TranslationConnection cn1 : cn.connections)
+            {
+                for(TranslationConnection cn2 : ab.connections)
+                {
+                    if(cn2.translations.containsAll(cn1.translations)) score+=cn1.translations.size();
+                }
+            }
+
+            for(TranslationConnection bn_connection : bn.connections) {
+                TranslationConnection ab_connection = ab.GetConnectionFromNode(bn_connection.Node1, 2);
+                TranslationConnection cn_connection = cn.GetConnectionFromNode(bn_connection.Node2, 2);
+                TranslationConnection ac_connection = null;
+                if(ab_connection!=null)
+                    ac_connection = ac.GetConnectionFromNode(ab_connection.Node1, 1);
+                else if(cn_connection != null)
+                    ac_connection = ac.GetConnectionFromNode(cn_connection.Node1, 2);
+                if(ab_connection==null && cn_connection!=null && ac_connection!=null)
+                {
+                    ab_connection = ab.GetConnectionFromNode(ac_connection.Node1,1);
+                }
+                if(cn_connection==null && ab_connection!=null && ac_connection!=null)
+                {
+                    cn_connection = cn.GetConnectionFromNode(ac_connection.Node2,1);
+                }
+
+
+                if (ab_connection != null && cn_connection != null) {
+                    if (ab_connection.Node1 != null && ab_connection.Node2 != null && cn_connection.Node1 != null && cn_connection.Node2 != null) {
+                        if ((ab_connection.Node1.inside.size() - ab_connection.Node2.inside.size()) == (cn_connection.Node1.inside.size() - cn_connection.Node2.inside.size()))
+                            score++;
+                        if ((ab_connection.Node1.above.size() - ab_connection.Node2.above.size()) == (cn_connection.Node1.above.size() - cn_connection.Node2.above.size()))
+                            score++;
+                        if ((ab_connection.Node1.left.size() - ab_connection.Node2.left.size()) == (cn_connection.Node1.left.size() - cn_connection.Node2.left.size()))
+                            score++;
+                        if ((ab_connection.Node1.right.size() - ab_connection.Node2.right.size()) == (cn_connection.Node1.right.size() - cn_connection.Node2.right.size()))
+                            score++;
+                    }
+                    for (LexicalDatabase.TRANSLATIONS tr : ab_connection.translations) {
+                        if (cn_connection.translations.contains(tr)) {
+                            score++;
+                            if (tr == LexicalDatabase.TRANSLATIONS.ROTATED)
+                                if ((ab_connection.Node1.angle - ab_connection.Node2.angle) == (cn_connection.Node1.angle - cn_connection.Node2.angle))
+                                    score++;
+                        }
+                    }
+                }
+                if (bn_connection != null && ac_connection != null) {
+                    if (bn_connection.Node1 != null && bn_connection.Node2 != null && ac_connection.Node1 != null && ac_connection.Node2 != null) {
+                        if ((bn_connection.Node1.inside.size() - bn_connection.Node2.inside.size()) == (ac_connection.Node1.inside.size() - ac_connection.Node2.inside.size()))
+                            score++;
+                        if ((bn_connection.Node1.above.size() - bn_connection.Node2.above.size()) == (ac_connection.Node1.above.size() - ac_connection.Node2.above.size()))
+                            score++;
+                        if ((bn_connection.Node1.left.size() - bn_connection.Node2.left.size()) == (ac_connection.Node1.left.size() - ac_connection.Node2.left.size()))
+                            score++;
+                        if ((bn_connection.Node1.right.size() - bn_connection.Node2.right.size()) == (ac_connection.Node1.right.size() - ac_connection.Node2.right.size()))
+                            score++;
+                    }
+
+                    for (LexicalDatabase.TRANSLATIONS tr : ac_connection.translations) {
+                        if (bn_connection.translations.contains(tr)) {
+                            score++;
+                            if (tr == LexicalDatabase.TRANSLATIONS.ROTATED)
+                                if ((ac_connection.Node1.angle - ac_connection.Node2.angle) == (bn_connection.Node1.angle - bn_connection.Node2.angle))
+                                    score++;
+                        }
+                    }
+                }
+            }
+            Scores.put(key,score);
+        }
+        return Scores;
+    }
+    public HashMap<String, RPM_Graph> Rpms;
+    public LexicalDatabase lexicalDatabase;
 }
 
 /**
@@ -361,7 +494,25 @@ public class Agent {
         HashMap<String, RavensFigure> figures = problem.getFigures();
 
         SemanticNetworkGenerator generator = new SemanticNetworkGenerator(lexicalDatabase, figures, problem.getProblemType().contentEquals("2x2") ? 0 : 1);
-        List<RPM_Graph> rpms = generator.generateNets();
+        HashMap<String, RPM_Graph> rpms = generator.generateNets();
+        StatisticalAnalyzer analyzer = new StatisticalAnalyzer(rpms,lexicalDatabase);
+        if(problem.getProblemType().contentEquals("2x2"))
+        {
+            HashMap<String, Integer> scores = analyzer.GetScores_2x2();
+            String maxKey = new String();
+            maxKey = "-1";
+            Integer maxVal=-1;
+            for(String key : scores.keySet())
+            {
+                if(scores.get(key)>maxVal)
+                {
+                    maxKey=key;
+                    maxVal = scores.get(key);
+                }
+            }
+            int val = Integer.parseInt(maxKey);
+            return val;
+        }
 
         return -1;
     }
