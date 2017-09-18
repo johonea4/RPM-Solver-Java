@@ -19,8 +19,9 @@ class LexicalDatabase
     enum VOCAB  { NOT_DEFINED,
                   BOTTOM_RIGHT, BOTTOM_LEFT, TOP_RIGHT, TOP_LEFT, BOTTOM, TOP,
                   LEFT_HALF, RIGHT_HALF, TOP_HALF, BOTTOM_HALF, YES, NO }
-    enum TRANSLATIONS { UNKNOWN, UNCHANGED, DELETED, MOVED, ENLARGE, SHRINK, ROTATED,
-                        MIRRORED, NEW, SHADED, UNSHADED, HALF_SHADED, HALF_UNSHADED, SHADE_CHANGED }
+    enum TRANSLATIONS { UNKNOWN, UNCHANGED, DELETED, NEW, ENLARGE, SHRINK, MIRRORED, ROTATED,
+                        MOVED, MOVED_UP, MOVED_DOWN, MOVED_LEFT, MOVED_RIGHT,
+                        SHADED, UNSHADED, HALF_SHADED, HALF_UNSHADED, SHADE_CHANGED }
     public LexicalDatabase()
     {
         database = new HashMap<>();
@@ -63,7 +64,7 @@ class GraphNode
         right = new ArrayList<>();
         object = obj;
         objectName = obj.getName();
-        if(object.getAttributes().containsKey(LexicalDatabase.KEYS.ALIGNMENT.name()))
+        if(object.getAttributes().containsKey("alignment"))
             position = (LexicalDatabase.VOCAB)db.getValue(obj.getAttributes().get("alignment"));
         else position = LexicalDatabase.VOCAB.NOT_DEFINED;
         if(object.getAttributes().containsKey("shape"))
@@ -165,7 +166,6 @@ class FigureGraph
     public HashMap<String,GraphNode> Nodes;
 
 }
-//----Here Down-----> Still Working
 class TranslationConnection
 {
     TranslationConnection(GraphNode n1, GraphNode n2)
@@ -178,7 +178,15 @@ class TranslationConnection
         if(n2 == null) { translations.add(LexicalDatabase.TRANSLATIONS.DELETED); return; }
         if(n1.shape != n2.shape) translations.add(LexicalDatabase.TRANSLATIONS.DELETED);
         if(n2.shape != n1.shape) translations.add(LexicalDatabase.TRANSLATIONS.NEW);
-        if(n1.position != n2.position) translations.add(LexicalDatabase.TRANSLATIONS.MOVED);
+        if(n1.position != n2.position)
+        {
+            if(n1.position.name().contains("TOP") && !n2.position.name().contains("TOP")) translations.add(LexicalDatabase.TRANSLATIONS.MOVED_DOWN);
+            if(n1.position.name().contains("BOTTOM") && !n2.position.name().contains("BOTTOM")) translations.add(LexicalDatabase.TRANSLATIONS.MOVED_UP);
+            if(n1.position.name().contains("LEFT") && !n2.position.name().contains("LEFT")) translations.add(LexicalDatabase.TRANSLATIONS.MOVED_RIGHT);
+            if(n1.position.name().contains("RIGHT") && !n2.position.name().contains("RIGHT")) translations.add(LexicalDatabase.TRANSLATIONS.MOVED_LEFT);
+            translations.add(LexicalDatabase.TRANSLATIONS.MOVED);
+
+        }
         if(n1.size.ordinal() > n2.size.ordinal()) translations.add(LexicalDatabase.TRANSLATIONS.SHRINK);
         if(n1.size.ordinal() < n2.size.ordinal()) translations.add(LexicalDatabase.TRANSLATIONS.ENLARGE);
         if(n1.angle != n2.angle) translations.add(LexicalDatabase.TRANSLATIONS.ROTATED);
@@ -356,6 +364,8 @@ class StatisticalAnalyzer
         for(String key : Rpms.keySet())
         {
             int score = 0;
+            int numDeleted1=0;
+            int numDeleted2=0;
             Scores.put(key,score);
             TranslationGraph ab = Rpms.get(key).translationGraph.get("AB");
             TranslationGraph ac = Rpms.get(key).translationGraph.get("AC");
@@ -379,6 +389,23 @@ class StatisticalAnalyzer
                     if(cn2.translations.containsAll(cn1.translations)) score+=cn1.translations.size();
                 }
             }
+            for(TranslationConnection cn1 : bn.connections)
+                if(cn1.translations.contains(LexicalDatabase.TRANSLATIONS.DELETED)) numDeleted1++;
+            for(TranslationConnection cn1 : ac.connections)
+                if(cn1.translations.contains(LexicalDatabase.TRANSLATIONS.DELETED)) numDeleted2++;
+
+            if(numDeleted1==numDeleted2) score+=numDeleted1;
+            numDeleted1=0;
+            numDeleted2=0;
+
+            for(TranslationConnection cn1 : ab.connections)
+                if(cn1.translations.contains(LexicalDatabase.TRANSLATIONS.DELETED)) numDeleted1++;
+            for(TranslationConnection cn1 : cn.connections)
+                if(cn1.translations.contains(LexicalDatabase.TRANSLATIONS.DELETED)) numDeleted2++;
+
+            if(numDeleted1==numDeleted2) score+=numDeleted1;
+            numDeleted1=0;
+            numDeleted2=0;
 
             for(TranslationConnection bn_connection : bn.connections) {
                 TranslationConnection ab_connection = ab.GetConnectionFromNode(bn_connection.Node1, 2);
@@ -412,8 +439,20 @@ class StatisticalAnalyzer
                     for (LexicalDatabase.TRANSLATIONS tr : ab_connection.translations) {
                         if (cn_connection.translations.contains(tr)) {
                             score++;
-                            if (tr == LexicalDatabase.TRANSLATIONS.ROTATED)
-                                if ((ab_connection.Node1.angle - ab_connection.Node2.angle) == (cn_connection.Node1.angle - cn_connection.Node2.angle))
+                            if (tr == LexicalDatabase.TRANSLATIONS.ROTATED) {
+                                double angleDiff1 = (cn_connection.Node1.angle - cn_connection.Node2.angle);
+                                double angleDiff2 = (ab_connection.Node1.angle - ab_connection.Node2.angle);
+                                if(angleDiff1<0) angleDiff1+=360;
+                                if(angleDiff2<0) angleDiff2+=360;
+                                if((angleDiff1==90 ) && (angleDiff2==270))
+                                    score+=2; //Mirrored
+                                else if((angleDiff1==270 ) && (angleDiff2==90))
+                                    score+=2; //mirrored
+                                else if (angleDiff1 == angleDiff2)
+                                    score++;
+                            }
+                            if(tr == LexicalDatabase.TRANSLATIONS.NEW)
+                                if(cn_connection.Node2.shape == ab_connection.Node2.shape)
                                     score++;
                         }
                     }
@@ -433,9 +472,18 @@ class StatisticalAnalyzer
                     for (LexicalDatabase.TRANSLATIONS tr : ac_connection.translations) {
                         if (bn_connection.translations.contains(tr)) {
                             score++;
-                            if (tr == LexicalDatabase.TRANSLATIONS.ROTATED)
-                                if ((ac_connection.Node1.angle - ac_connection.Node2.angle) == (bn_connection.Node1.angle - bn_connection.Node2.angle))
+                            if (tr == LexicalDatabase.TRANSLATIONS.ROTATED) {
+                                double angleDiff1 = ac_connection.Node1.angle - ac_connection.Node2.angle;
+                                double angleDiff2 = bn_connection.Node1.angle - bn_connection.Node2.angle;
+                                if(angleDiff1<0) angleDiff1+=360;
+                                if(angleDiff2<0) angleDiff2+=360;
+                                if((angleDiff1==90 ) && (angleDiff2==270))
+                                    score+=2; //Mirrored
+                                else if((angleDiff1==270) && (angleDiff2==90))
+                                    score+=2; //mirrored
+                                else if (angleDiff1 == angleDiff2)
                                     score++;
+                            }
                         }
                     }
                 }
